@@ -11,7 +11,7 @@ readme = "../README.md"
 include = ["Cargo.toml", "src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [dependencies]
-proc-macro2 = { git = "https://github.com/mystor/proc-macro2", branch = "byte_literal" }
+proc-macro2 = { git = "https://github.com/alexcrichton/proc-macro2" }
 
 [dev-dependencies.syn]
 version = "0.12"

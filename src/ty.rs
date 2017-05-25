@@ -242,8 +242,6 @@ pub mod parsing {
     use ident::parsing::ident;
     use lit::parsing::string;
     use mac::parsing::mac;
-    #[cfg(feature = "full")]
-    use synom::{IResult, TokenTree};
 
     named!(pub ty -> Ty, alt!(
         ty_paren // must be before ty_tup

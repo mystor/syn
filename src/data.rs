@@ -155,16 +155,6 @@ pub mod parsing {
         terminated!(expr, after_discriminant) => { ConstExpr::Other }
     ));
 
-    // XXX: HACKY
-    #[cfg(feature = "full")]
-    pub fn eof(input: &[synom::TokenTree]) -> synom::IResult<&[synom::TokenTree], &'static str> {
-        if input.is_empty() {
-            synom::IResult::Done(&[], "")
-        } else {
-            synom::IResult::Error
-        }
-    }
-
     #[cfg(feature = "full")]
     named!(after_discriminant -> &str, peek!(alt!(punct!(",") | input_end!())));
 
