@@ -1078,6 +1078,31 @@ pub trait Parser: Sized {
         self.parse2(proc_macro2::TokenStream::from_str(s)?)
     }
 
+    /// Parse the stream of tokens visible from a [`Cursor`] into the chosen
+    /// syntax tree node.
+    ///
+    /// This function will check that the input is fully parsed. If there are
+    /// any unparsed tokens at the end of the stream, an error is returned.
+    ///
+    /// This method is eqivalent to `Parser::parse2(cursor.token_stream())`, but
+    /// may be more performant in situations where the same `TokenStream` is
+    /// re-parsed many times. In these situations, a [`TokenBuffer`] may be
+    /// pre-computed and shared between calls.
+    ///
+    /// [`Cursor`]: crate::buffer::Cursor
+    ///
+    /// # Drawbacks
+    ///
+    /// Like the other methods on this trait, this method is intended as a
+    /// parser entry-point, and is not intended to be used for speculative
+    /// parsing or as part of `Parse` implementations. Other methods, such as
+    /// [`ParseStream::fork`], should be preferred in those situations.
+    ///
+    /// [`ParseStream::fork`]: ParseStream::fork
+    fn parse_cursor(self, cursor: Cursor) -> Result<Self::Output> {
+        self.parse2(cursor.token_stream())
+    }
+
     // Not public API.
     #[doc(hidden)]
     fn __parse_scoped(self, scope: Span, tokens: TokenStream) -> Result<Self::Output> {
@@ -1092,11 +1117,19 @@ pub trait Parser: Sized {
     }
 }
 
-fn tokens_to_parse_buffer(tokens: &TokenBuffer) -> ParseBuffer {
-    let scope = Span::call_site();
-    let cursor = tokens.begin();
+fn run_parser<F, T>(parser: F, scope: Span, cursor: Cursor) -> Result<T>
+where
+    F: FnOnce(ParseStream) -> Result<T>,
+{
     let unexpected = Rc::new(Cell::new(None));
-    new_parse_buffer(scope, cursor, unexpected)
+    let state = new_parse_buffer(scope, cursor, unexpected);
+    let node = parser(&state)?;
+    state.check_unexpected()?;
+    if state.is_empty() {
+        Ok(node)
+    } else {
+        Err(state.error("unexpected token"))
+    }
 }
 
 impl<F, T> Parser for F
@@ -1105,31 +1138,19 @@ where
 {
     type Output = T;
 
-    fn parse2(self, tokens: TokenStream) -> Result<T> {
+    fn parse2(self, tokens: TokenStream) -> Result<Self::Output> {
         let buf = TokenBuffer::new2(tokens);
-        let state = tokens_to_parse_buffer(&buf);
-        let node = self(&state)?;
-        state.check_unexpected()?;
-        if state.is_empty() {
-            Ok(node)
-        } else {
-            Err(state.error("unexpected token"))
-        }
+        run_parser(self, Span::call_site(), buf.begin())
+    }
+
+    fn parse_cursor(self, cursor: Cursor) -> Result<Self::Output> {
+        run_parser(self, Span::call_site(), cursor)
     }
 
     #[doc(hidden)]
     fn __parse_scoped(self, scope: Span, tokens: TokenStream) -> Result<Self::Output> {
         let buf = TokenBuffer::new2(tokens);
-        let cursor = buf.begin();
-        let unexpected = Rc::new(Cell::new(None));
-        let state = new_parse_buffer(scope, cursor, unexpected);
-        let node = self(&state)?;
-        state.check_unexpected()?;
-        if state.is_empty() {
-            Ok(node)
-        } else {
-            Err(state.error("unexpected token"))
-        }
+        run_parser(self, scope, buf.begin())
     }
 
     #[doc(hidden)]
